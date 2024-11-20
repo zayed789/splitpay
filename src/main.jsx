@@ -7,12 +7,16 @@ function Main() {
   const [expenses, setExpenses] = useState([]);
   const [inputs, setInputs] = useState({
     amount: "",
+    expenseName: "",
     paidBy: "",
     participants: [],
   });
-  const [transactions, setTransactions] = useState([]); // New state to hold detailed transactions
+  const [transactions, setTransactions] = useState([]);
+  const [individualExpenses, setIndividualExpenses] = useState({});
+  const [totalAmountSpent, setTotalAmountSpent] = useState(0); // New state to track total amount spent
   const amtRef = useRef(null);
   const pdRef = useRef(null);
+  const expNameRef = useRef(null);
 
   const handleAddPerson = () => {
     const name = document.getElementById("name").value;
@@ -38,9 +42,10 @@ function Main() {
   };
 
   const handleAddExpense = () => {
-    const { amount, paidBy, participants } = inputs;
+    const { amount, expenseName, paidBy, participants } = inputs;
     if (
       amount &&
+      expenseName &&
       paidBy &&
       participants.length > 0 &&
       participants.includes(paidBy)
@@ -48,6 +53,8 @@ function Main() {
       const amountValue = parseFloat(amount);
       const share = (amountValue / participants.length).toFixed(2);
       const newExpenses = [...expenses];
+      const newIndividualExpenses = { ...individualExpenses };
+
       participants.forEach((participant) => {
         const index = names.indexOf(participant);
         if (participant === paidBy) {
@@ -56,27 +63,42 @@ function Main() {
         } else {
           newExpenses[index] = (newExpenses[index] || 0) - share;
         }
+        
+        // Track total expenses, last expense category, and participants for the paying participant
+        if (participant === paidBy) {
+          if (!newIndividualExpenses[participant]) {
+            newIndividualExpenses[participant] = {
+              amount: 0,
+              category: expenseName,
+              participants: [],
+            };
+          }
+          newIndividualExpenses[participant].amount += amountValue;
+          newIndividualExpenses[participant].category = expenseName;
+          newIndividualExpenses[participant].participants = participants;
+        }
       });
+
       setExpenses(newExpenses);
-      generateTransactions(newExpenses); // Call function to create detailed transactions
+      setIndividualExpenses(newIndividualExpenses);
+      setTotalAmountSpent((prevTotal) => prevTotal + amountValue); // Update total amount spent
+      generateTransactions(newExpenses);
       clr();
     } else {
       alert("Please enter valid values first");
     }
   };
 
-  // Function to generate detailed transactions
   const generateTransactions = (balances) => {
     const transactionList = [];
-    const creditors = []; // People who are owed money
-    const debtors = []; // People who owe money
+    const creditors = [];
+    const debtors = [];
 
     balances.forEach((balance, index) => {
       if (balance > 0) creditors.push({ name: names[index], amount: balance });
       if (balance < 0) debtors.push({ name: names[index], amount: -balance });
     });
 
-    // Match debtors with creditors
     let i = 0,
       j = 0;
     while (i < debtors.length && j < creditors.length) {
@@ -101,13 +123,15 @@ function Main() {
   };
 
   const clr = () => {
-    setInputs({ amount: "", paidBy: "", participants: [] });
+    setInputs({ amount: "", expenseName: "", paidBy: "", participants: [] });
     amtRef.current.value = "";
     pdRef.current.value = "";
+    expNameRef.current.value = "";
   };
 
   const isAddExpenseDisabled = !(
     inputs.amount &&
+    inputs.expenseName &&
     inputs.paidBy &&
     inputs.participants.length > 0 &&
     inputs.participants.includes(inputs.paidBy)
@@ -132,6 +156,7 @@ function Main() {
           Summary
         </button>
       </div>
+
       <div className={`divs ${activeDiv === "adperson" ? "active" : ""}`}>
         <h1>Bills</h1>
         <h2>Add Persons</h2>
@@ -150,6 +175,7 @@ function Main() {
           ))}
         </ol>
       </div>
+
       <div className={`divs ${activeDiv === "expenses" ? "active" : ""}`}>
         <h2>Expenses</h2>
         <div>
@@ -160,6 +186,17 @@ function Main() {
             value={inputs.amount}
             onChange={handleInputChange}
             ref={amtRef}
+          />
+        </div>
+        <div>
+          <h3>Expense Category:</h3>
+          <input
+            type="text"
+            id="expenseName"
+            value={inputs.expenseName}
+            onChange={handleInputChange}
+            ref={expNameRef}
+            placeholder="E.g., Groceries, Dinner"
           />
         </div>
         <div>
@@ -196,15 +233,64 @@ function Main() {
           Add Expense
         </button>
       </div>
+
       <div className={`divs ${activeDiv === "summary" ? "active" : ""}`}>
-        <h2>Summary</h2>
-        <ul>
-          {transactions.map((transaction, index) => (
-            <li key={index}>
-              {transaction.payer} owes {transaction.payee} ${transaction.amount}
-            </li>
-          ))}
-        </ul>
+        <h2>Individual Expenditures</h2>
+        <center>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Total Expenditure</th>
+              <th>Last Expense Category</th>
+              <th>Participants</th>
+            </tr>
+          </thead>
+          <tbody>
+            {names.map((name, index) => (
+              <tr key={index}>
+                <td>{name}</td>
+                <td>
+                  <i className="fas fa-rupee-sign"></i>{" "}
+                  {(individualExpenses[name]?.amount || 0).toFixed(2)}
+                </td>
+                <td>
+                  {individualExpenses[name]?.category || "N/A"}
+                </td>
+                <td>
+                  {individualExpenses[name]?.participants.join(", ") || "N/A"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </center>
+        <h2>Total Amount Spent</h2>
+        <p>
+          <i className="fas fa-rupee-sign"></i> {totalAmountSpent.toFixed(2)}
+        </p>
+
+        <h2>Who owes whom</h2>
+        <center>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Amount</th>
+              <th>To Whom</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transactions.map((transaction, index) => (
+              <tr key={index}>
+                <td>{transaction.payer}</td>
+                <td>{transaction.amount}</td>
+                <td>{transaction.payee}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </center>
       </div>
     </div>
   );
